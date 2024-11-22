@@ -12,9 +12,10 @@ import { writeFile, readdir, stat, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import chalk from "chalk";
-import { messagesZh, messagesEn, transformFile } from "./transform.js";
+import { messageKeys, transformFile } from "./transform.js";
+import { jsonToXlsx, xlsxToJson } from "./helper.js";
 const program = new Command();
-program.name("lp-react-intl").description("自动国际化").version("1.0.0");
+program.name("lp-react-intl-cli").description("自动国际化").version("1.0.1");
 function transformAndWriteFile(filePath_1) {
     return __awaiter(this, arguments, void 0, function* (filePath, extract = false) {
         try {
@@ -46,7 +47,7 @@ function transformDirectory(dirPath_1) {
             if (entry.isDirectory()) {
                 yield transformDirectory(fullPath, extract);
             }
-            else if (extensions.has(path.extname(entry.name))) {
+            else if (extensions.has(path.extname(entry.name)) && !entry.name.endsWith('.d.ts')) {
                 yield transformAndWriteFile(fullPath, extract);
             }
         }
@@ -93,6 +94,14 @@ program
     const zhPath = path.join(process.cwd(), "src/locales/zh.json");
     const enPath = path.join(process.cwd(), "src/locales/en.json");
     try {
+        const messagesZh = {}; // 存储所有中文消息
+        const messagesEn = {}; // 存储所有英文消息，值为空字符串
+        messageKeys.forEach((key) => {
+            if (!messagesZh[key]) {
+                messagesZh[key] = key;
+                messagesEn[key] = ""; // en.json 的值为空字符串
+            }
+        });
         yield writeFile(zhPath, JSON.stringify(messagesZh, null, 2), "utf-8");
         yield writeFile(enPath, JSON.stringify(messagesEn, null, 2), "utf-8");
         console.log(`${chalk.bgGreen("EXTRACTED")} 中文消息写入 ${zhPath}`);
@@ -102,6 +111,7 @@ program
         console.log(chalk.red("写入文件失败"), error);
     }
 }));
+// 初始化
 program
     .command("init")
     .description("初始化国际化设置文件")
@@ -132,8 +142,7 @@ const intl = createIntl(
   },
   cache
 );
-export default intl;
-      `;
+export default intl;`;
     try {
         // Create src directory if it doesn't exist
         yield mkdir(localesPath, { recursive: true });
@@ -149,5 +158,22 @@ export default intl;
     catch (e) {
         console.log(chalk.red("初始化文件创建失败"), e);
     }
+}));
+// 将目录下所有json文件 转换成一个 XLSX
+program
+    .command('excel')
+    .description('将目录下所有json文件 转换成一个 XLSX')
+    .argument('[dir]', '入口的文件夹路径', './src/locales')
+    .argument('[output]', '输出的文件路径', './src/locales/output.xlsx')
+    .action((dir, output) => __awaiter(void 0, void 0, void 0, function* () {
+    yield jsonToXlsx(dir, output);
+}));
+program
+    .command("json")
+    .description("将 XLSX 文件转换成 JSON 文件")
+    .argument("[input]", "待转换的文件路径", "./src/locales/output.xlsx")
+    .argument("[output]", "待转换的文件夹路径", "./src/locales")
+    .action((input, output) => __awaiter(void 0, void 0, void 0, function* () {
+    yield xlsxToJson(input, output);
 }));
 program.parse();

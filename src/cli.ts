@@ -3,11 +3,12 @@ import { access, writeFile, readdir, stat, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import chalk from "chalk";
-import { messagesZh, messagesEn, transformFile } from "./transform.js";
+import { messageKeys, transformFile } from "./transform.js";
+import { jsonToXlsx, xlsxToJson } from "./helper.js";
 
 const program = new Command();
 
-program.name("lp-react-intl").description("自动国际化").version("1.0.0");
+program.name("lp-react-intl-cli").description("自动国际化").version("1.0.1");
 
 async function transformAndWriteFile(filePath, extract = false) {
   try {
@@ -37,7 +38,7 @@ async function transformDirectory(dirPath, extract = false) {
 
     if (entry.isDirectory()) {
       await transformDirectory(fullPath, extract);
-    } else if (extensions.has(path.extname(entry.name))) {
+    } else if (extensions.has(path.extname(entry.name)) && !entry.name.endsWith('.d.ts')) {
       await transformAndWriteFile(fullPath, extract);
     }
   }
@@ -85,6 +86,14 @@ program
     const enPath = path.join(process.cwd(), "src/locales/en.json");
 
     try {
+      const messagesZh: Record<string, string> = {}; // 存储所有中文消息
+      const messagesEn: Record<string, string> = {}; // 存储所有英文消息，值为空字符串
+      messageKeys.forEach((key) => {
+        if (!messagesZh[key]) {
+          messagesZh[key] = key;
+          messagesEn[key] = ""; // en.json 的值为空字符串
+        }
+      });
       await writeFile(zhPath, JSON.stringify(messagesZh, null, 2), "utf-8");
       await writeFile(enPath, JSON.stringify(messagesEn, null, 2), "utf-8");
 
@@ -95,6 +104,7 @@ program
     }
   });
 
+// 初始化
 program
   .command("init")
   .description("初始化国际化设置文件")
@@ -126,8 +136,7 @@ const intl = createIntl(
   },
   cache
 );
-export default intl;
-      `;
+export default intl;`;
 
     try {
       // Create src directory if it doesn't exist
@@ -148,4 +157,25 @@ export default intl;
     }
   });
 
+// 将目录下所有json文件 转换成一个 XLSX
+program
+  .command('excel')
+  .description('将目录下所有json文件 转换成一个 XLSX')
+  .argument('[dir]', '入口的文件夹路径', './src/locales')
+  .argument('[output]', '输出的文件路径', './src/locales/output.xlsx')
+  .action(async (dir, output) => {
+    await jsonToXlsx(dir, output);
+  })
+
+program
+  .command("json")
+  .description("将 XLSX 文件转换成 JSON 文件")
+  .argument("[input]", "待转换的文件路径", "./src/locales/output.xlsx")
+  .argument("[output]", "待转换的文件夹路径", "./src/locales")
+
+  .action(async (input, output) => {
+    await xlsxToJson(input, output);
+  })
+
+  
 program.parse();
